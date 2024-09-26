@@ -7,10 +7,17 @@
 import asyncio
 import os
 import sys
+import logging
 import argparse
 import aioshutil
 import aiofiles.os
 
+logger = logging.getLogger(__name__)
+stream_handler = logging.StreamHandler()
+logger.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+stream_handler.setFormatter(formatter)
+logger.addHandler(stream_handler)
 
 def parse_args():
     '''Функція парсить аргументи командного рядка і вертає Namespace із ними'''
@@ -25,7 +32,7 @@ def parse_args():
     return parser.parse_args()
 
 
-async def read_files(src: str, dest: str):
+async def read_folder(src: str, dest: str):
     '''
     Функція приймає шляхи у файловій системі, обходить рекурсивно всі елементи
     за цим шляхом, і повертає список із повними шляхами до всіх файлів, які знайшлися. 
@@ -34,9 +41,10 @@ async def read_files(src: str, dest: str):
     for item in os.listdir(src):
         item_path = os.path.join(src, item)
         if os.path.isdir(item_path):
-            res.extend(await read_files(item_path, dest))
+            res.extend(await read_folder(item_path, dest))
         else:
             res.append(item_path)
+            logger.debug("Зчитано файл %s", item_path)
     return res
 
 async def copy_file(list_of_files, dest):
@@ -50,19 +58,20 @@ async def copy_file(list_of_files, dest):
             dir_path = os.path.join(dest, extention)
             await aiofiles.os.makedirs(dir_path, exist_ok=True)
             await aioshutil.copy(item, dir_path)
+            logger.debug("Скопійовано файл %s у %s", item, dir_path)
 
 
 async def main():
     args = parse_args()
     try:
-        files = await read_files(args.source, args.output)
+        files = await read_folder(args.source, args.output)
         await copy_file(files, args.output)
     except FileNotFoundError as e:
-        print(f"Помилка: Шлях {e.filename} не існує")
+        logger.error("Помилка: шлях %s не існує", e.filename)
     except Exception as e:
-        print(f"Помилка при копіюванні файлів: {e}")
+        logger.error("Помилка при копіюванні файлів: %s", e)
     else:
-        print(f"Файли скопійовано у призначення {args.output}")
+        logger.info("Файли скопійовано у призначення %s", args.output)
 
 
 if __name__ == "__main__":
